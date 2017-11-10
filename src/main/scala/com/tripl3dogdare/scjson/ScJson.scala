@@ -1,19 +1,24 @@
 package com.tripl3dogdare
 
 import collection.SeqLike
-import scala.language.implicitConversions
 import scala.util.matching.Regex
 import scala.annotation.tailrec
+import scala.language.existentials
+import scala.language.implicitConversions
 
 package object scjson {
   // Typedefs
-  sealed abstract trait JsonValue {
+  type JsonMap = Map[String, JsonValue[_]]
+  type JsonList = List[JsonValue[_]]
+
+  sealed abstract class JsonValue[T <% JsonValue[_]] {
+    val value:T;
     def mkString:String; 
-    def as[A <% JsonValue] = this.asInstanceOf[A]
+    def as[A <% JsonValue[_]] = this.asInstanceOf[A]
   }
 
-  sealed abstract class JsonCollection[K <: JsonValue] extends JsonValue {
-    def getTyped[A <% JsonValue](key:K):A;
+  sealed abstract class JsonCollection[K <: JsonValue[_], T <% JsonValue[_]] extends JsonValue[T] {
+    def getTyped[A <% JsonValue[_]](key:K):A;
 
     def getObject(key:K) = getTyped[JsonObject](key)
     def getArray(key:K) = getTyped[JsonArray](key)
@@ -26,22 +31,22 @@ package object scjson {
     def getObj(key:K) = getObject(key)
     def getArr(key:K) = getArray(key)
 
-    def |(key:K) = getTyped[JsonCollection[JsonValue]](key);
-    def $(key:K) = getTyped[JsonValue](key)
+    def |(key:K) = getTyped[JsonCollection[JsonValue[_], JsonCollection[_,_]]](key);
+    def $(key:K) = getTyped[JsonValue[_]](key)
   }
 
-  case class JsonObject(val value:Map[String, JsonValue]) extends JsonCollection[JsonString] {
+  case class JsonObject(val value:JsonMap) extends JsonCollection[JsonString, JsonMap] {
     def mkString = value.map {case (k,v) => quote(k) + ":" + v.mkString}.mkString("{", ",", "}")
-    def getTyped[A <% JsonValue](key:JsonString) = value.getOrElse(key, null).asInstanceOf[A]
+    def getTyped[A <% JsonValue[_]](key:JsonString) = value.getOrElse(key, null).asInstanceOf[A]
   }
 
-  case class JsonArray(val value:List[JsonValue]) extends JsonCollection[JsonInt] {
+  case class JsonArray(val value:JsonList) extends JsonCollection[JsonInt, JsonList] {
     def mkString = value.map(_.mkString).mkString("[", ",", "]")
-    def getTyped[A <% JsonValue](key:JsonInt) = value.lift(key).getOrElse(null).asInstanceOf[A]
+    def getTyped[A <% JsonValue[_]](key:JsonInt) = value.lift(key).getOrElse(null).asInstanceOf[A]
   }
 
-  sealed abstract trait JsonAtom[T] extends JsonValue {
-    val value:T; override def toString = value.toString; def mkString = toString }
+  sealed abstract trait JsonAtom[T] extends JsonValue[T] {
+    override def toString = value.toString; def mkString = toString }
   case class JsonString(override val value:String) extends JsonAtom[String] { override def mkString = quote(value) }
   case class JsonInt(override val value:Int) extends JsonAtom[Int]
   case class JsonFloat(override val value:Float) extends JsonAtom[Float]
@@ -60,7 +65,7 @@ package object scjson {
   private final type Token = (Symbol, String) 
   private final val Noop = ('Noop, "")
 
-  def parseJson(from:String):JsonValue = parse(lex(from))._1
+  def parseJson(from:String):JsonValue[_] = parse(lex(from))._1
 
   @tailrec
   private def lex(from:String, tokens:List[Token]=List()):List[Token] = from.headOption match {
@@ -100,10 +105,10 @@ package object scjson {
     }
   }
 
-  private def parse(tokens:List[Token]):(JsonValue, List[Token]) = tokens.headOption.getOrElse(Noop) match {
+  private def parse(tokens:List[Token]):(JsonValue[_], List[Token]) = tokens.headOption.getOrElse(Noop) match {
     case ('ObjectBegin, _) => {
       var tail = tokens.tail
-      var pairs = List[(String, JsonValue)]()
+      var pairs = List[(String, JsonValue[_])]()
       var cont = tail.headOption.getOrElse(Noop)._1 != 'ObjectEnd
 
       while(cont) {
@@ -128,7 +133,7 @@ package object scjson {
 
     case ('ArrayBegin, _) => {
       var tail = tokens.tail
-      var list = List[JsonValue]()
+      var list:JsonList = List()
       var cont = true
 
       while(cont) {
@@ -161,24 +166,24 @@ package object scjson {
   }
 
   // Implicit conversions and DSL utilities
-  def obj(pairs:Tuple2[String, JsonValue]*) = JsonObject(Map(pairs:_*))
-  def arr(elems:JsonValue*) = JsonArray(List(elems:_*))
+  def obj(pairs:(String, JsonValue[_])*) = JsonObject(Map(pairs:_*))
+  def arr(elems:JsonValue[_]*) = JsonArray(List(elems:_*))
 
-  implicit def map2json(v:Map[String, JsonValue]):JsonObject = JsonObject(v)
-  implicit def arr2json(v:List[JsonValue]):JsonArray = JsonArray(v)
-  implicit def str2json(v:String):JsonString = JsonString(v)
-  implicit def int2json(v:Int):JsonInt = JsonInt(v)
-  implicit def flt2json(v:Float):JsonFloat = JsonFloat(v)
-  implicit def bln2json(v:Boolean):JsonBoolean = JsonBoolean(v)
-  implicit def nul2json(v:Null):JsonNull = JsonNull()
+  implicit def map2json(from:JsonMap):JsonObject = JsonObject(from)
+  implicit def arr2json(from:JsonList):JsonArray = JsonArray(from)
+  implicit def str2json(from:String):JsonString = JsonString(from)
+  implicit def int2json(from:Int):JsonInt = JsonInt(from)
+  implicit def flt2json(from:Float):JsonFloat = JsonFloat(from)
+  implicit def bln2json(from:Boolean):JsonBoolean = JsonBoolean(from)
+  implicit def nul2json(from:Null):JsonNull = JsonNull()
   
-  implicit def json2map(v:JsonObject):Map[String, JsonValue] = v.value
-  implicit def json2arr(v:JsonArray):List[JsonValue] = v.value
-  implicit def json2str(v:JsonString):String = v.value
-  implicit def json2int(v:JsonInt):Int = v.value
-  implicit def json2flt(v:JsonFloat):Float = v.value
-  implicit def json2bln(v:JsonBoolean):Boolean = v.value
-  implicit def json2nul(v:JsonNull):Null = null
+  implicit def json2map(from:JsonObject):JsonMap = from.value
+  implicit def json2arr(from:JsonArray):JsonList = from.value
+  implicit def json2str(from:JsonString):String = from.value
+  implicit def json2int(from:JsonInt):Int = from.value
+  implicit def json2flt(from:JsonFloat):Float = from.value
+  implicit def json2bln(from:JsonBoolean):Boolean = from.value
+  implicit def json2nul(from:JsonNull):Null = null
 
   // Utility functions
   private def quote(s: String): String = "\"" + escape(s) + "\""

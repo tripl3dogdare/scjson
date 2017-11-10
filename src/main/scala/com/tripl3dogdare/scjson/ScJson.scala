@@ -7,65 +7,198 @@ import scala.annotation.tailrec
 import scala.language.existentials
 import scala.language.implicitConversions
 
+/**
+ * The main package for ScJson.
+ * @author Connor Scialdone
+ */
 package object scjson {
-  // Typedefs
+  /** Convenience definition for the underlying type of JsonObject. */
   type JsonMap = Map[String, JsonValue[_]]
+
+  /** Convenience definition for the underlying type of JsonArray. */
   type JsonList = List[JsonValue[_]]
 
+  /** 
+   * The primary superclass for all JSON types.
+   * @tparam T The underlying type. Must be viewable as JsonValue.
+   */
   sealed abstract class JsonValue[T <% JsonValue[_]] {
+    /** The underlying value. */
     val value:T;
+
+    /**
+     * Converts this JsonValue to it's JSON string representation.
+     * @return The JSON string.
+     */
     def mkString:String; 
+
+    /**
+     * Casts this JsonValue to the given type.
+     * Providese better type safety over asInstanceOf[Type] as it only allows types viewable as JsonValue.
+     * @tparam A The desired type.
+     */
     def as[A <% JsonValue[_]] = this.asInstanceOf[A]
   }
 
+  /** 
+   * A JSON type designed for holding other JSON values, such as an object or array.
+   * @tparam K The type to be used as the collection's keys.
+   * @tparam T The underlying collection type. Must be viewable as JsonValue. 
+   */
   sealed abstract class JsonCollection[K <: JsonValue[_], T <% JsonValue[_]] extends JsonValue[T] {
+    /**
+     * Gets a value from the collection and casts it to the given type.
+     * @tparam A The desired return type. Must be viewable as JsonValue.
+     * @param key The key to look up.
+     * @return The value at the given key, cast to the given type.
+     */
     def getTyped[A <% JsonValue[_]](key:K):A;
 
+    /**
+     * Gets a JsonObject from the collection.
+     * @param key The key to look up.
+     * @return The object at the given key.
+     */
     def getObject(key:K) = getTyped[JsonObject](key)
+
+    
+    /**
+     * Gets a JsonArray from the collection.
+     * @param key The key to look up.
+     * @return The array at the given key.
+     */
     def getArray(key:K) = getTyped[JsonArray](key)
+    
+    /**
+     * Gets a JsonString from the collection.
+     * @param key The key to look up.
+     * @return The string at the given key.
+     */
     def getString(key:K) = getTyped[JsonString](key)
+
+    /**
+     * Gets a JsonInt from the collection.
+     * @param key The key to look up.
+     * @return The integer at the given key.
+     */
     def getInt(key:K) = getTyped[JsonInt](key)
+    
+    /**
+     * Gets a JsonFloat from the collection.
+     * @param key The key to look up.
+     * @return The float at the given key.
+     */
     def getFloat(key:K) = getTyped[JsonFloat](key)
+    
+    /**
+     * Gets a JsonBoolean from the collection.
+     * @param key The key to look up.
+     * @return The boolean at the given key.
+     */
     def getBoolean(key:K) = getTyped[JsonBoolean](key)
+    
+    /**
+     * Gets a JsonNull from the collection.
+     * @param key The key to look up.
+     * @return The null at the given key.
+     */
     def getNull(key:K) = getTyped[JsonNull](key)
 
+    /**
+     * Gets a JsonObject from the collection.
+     * @param key The key to look up.
+     * @return The object at the given key.
+     */
     def getObj(key:K) = getObject(key)
+    
+    /**
+     * Gets a JsonArray from the collection.
+     * @param key The key to look up.
+     * @return The array at the given key.
+     */
     def getArr(key:K) = getArray(key)
 
+    /**
+     * Gets a JsonCollection from the collection.
+     * @param key The key to look up.
+     * @return The object or array at the given key.
+     */
     def |(key:K) = getTyped[JsonCollection[JsonValue[_], JsonCollection[_,_]]](key);
+
+    
+    /**
+     * Gets a JsonValue from the collection.
+     * @param key The key to look up.
+     * @return The value at the given key.
+     */
     def $(key:K) = getTyped[JsonValue[_]](key)
   }
 
+  /** 
+   * Represents a JSON object.
+   * Implements JsonCollection over a Map[String, JsonValue[_]].
+   * @param value The underlying Map.
+   */
   case class JsonObject(val value:JsonMap) extends JsonCollection[JsonString, JsonMap] {
     def mkString = value.map {case (k,v) => quote(k) + ":" + v.mkString}.mkString("{", ",", "}")
     def getTyped[A <% JsonValue[_]](key:JsonString) = value.getOrElse(key, null).asInstanceOf[A]
   }
 
+  /** 
+   * Represents a JSON array.
+   * Implements JsonCollection over a List[JsonValue[_]].
+   * @param value The underlying List.
+   */
   case class JsonArray(val value:JsonList) extends JsonCollection[JsonInt, JsonList] {
     def mkString = value.map(_.mkString).mkString("[", ",", "]")
     def getTyped[A <% JsonValue[_]](key:JsonInt) = value.lift(key).getOrElse(null).asInstanceOf[A]
   }
 
+  /**
+   * A JSON type designed to hold a single value.
+   * @tparam T The underlying type. Must be viewable as JsonValue.
+   */
   sealed abstract trait JsonAtom[T] extends JsonValue[T] {
-    override def toString = value.toString; def mkString = toString }
-  case class JsonString(override val value:String) extends JsonAtom[String] { override def mkString = quote(value) }
-  case class JsonInt(override val value:Int) extends JsonAtom[Int]
-  case class JsonFloat(override val value:Float) extends JsonAtom[Float]
-  case class JsonBoolean(override val value:Boolean) extends JsonAtom[Boolean]
+    override def toString = value.toString; 
+    def mkString = toString 
+  }
 
+  /** Represents a JSON string. 
+   *  @param value The underlying value. */
+  case class JsonString(val value:String) extends JsonAtom[String] { override def mkString = quote(value) }
+
+  /** Represents a JSON integer. 
+   *  @param value The underlying value. */
+  case class JsonInt(val value:Int) extends JsonAtom[Int]
+
+  /** Represents a JSON float or fractional. 
+   *  @param value The underlying value. */
+  case class JsonFloat(val value:Float) extends JsonAtom[Float]
+  
+  /** Represents a JSON boolean. 
+   *  @param value The underlying value. */
+  case class JsonBoolean(val value:Boolean) extends JsonAtom[Boolean]
+
+  /** Represents a JSON null. 
+   *  @param value The underlying value. */
   case class JsonNull() extends JsonAtom[Null] { 
-    override val value = null; 
+    val value = null; 
     override def toString = "null"
     override def mkString = "null"
   }
 
-  // Parsing
+  /** Thrown when an error is encountered while parsing JSON. */
   case class JsonParseError(msg:String) extends Exception(msg) with NoStackTrace
   private final val Whitespace = "\\s".r
   private final val Digit = "\\d".r
   private final type Token = (Symbol, String) 
   private final val Noop = ('Noop, "")
 
+  /**
+   * Parses JSON from a string to a usable JsonValue heirarchy.
+   * @param from The string to parse.
+   * @return The parsed JsonValue.
+   */
   def parseJson(from:String):JsonValue[_] = {
     val parsed = parse(lex(from))
     if(parsed._2.filter(_ != Noop).length > 0) 
@@ -179,10 +312,21 @@ package object scjson {
     }
   }
 
-  // Implicit conversions and DSL utilities
+  /**
+   * Shorthand method for creating a JsonObject.
+   * @param pairs A list of key/value tuples to convert.
+   * @return The created JsonObject.
+   */
   def obj(pairs:(String, JsonValue[_])*) = JsonObject(Map(pairs:_*))
+
+  /**
+   * Shorthand method for creating a JsonArray.
+   * @param pairs A list of values to convert.
+   * @return The created JsonArray.
+   */
   def arr(elems:JsonValue[_]*) = JsonArray(List(elems:_*))
 
+  // Implicit conversions
   implicit def map2json(from:JsonMap):JsonObject = JsonObject(from)
   implicit def arr2json(from:JsonList):JsonArray = JsonArray(from)
   implicit def str2json(from:String):JsonString = JsonString(from)

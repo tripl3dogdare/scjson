@@ -5,37 +5,27 @@ ScJson is a lightweight, batteries-included library for dealing with JSON in Sca
 ScJson is designed with the goal of coming as close as possible to the ease of managing JSON in dynamically typed languages like Javascript. While this makes it fast, lightweight, and easy to use, it does come with it's own drawbacks - for example, a reduction in type safety and lack of some features that might be considered "basic" when it comes to Scala JSON libraries.
 
 
-
 ## Installation
 
 See [Getting Started](https://github.com/tripl3dogdare/scjson/wiki/Getting-Started).
 
 
-
 ## Why ScJson?
 
 - Lightweight and batteries included
-
   - One source file weighing in at < 200 lines of code
-
-
   - No third-party dependencies, even for parsing
   - Only one import statement to remember
-
 - Easy to use
-
   - No case-class destructuring required
   - Simple shortcut syntax for recursing into deeply nested JSON
   - Longer, more explicit syntax options for dealing with JSON in a type-safe manner
   - Concise DSL syntax for creating JSON
   - Extensive implicit conversions reduce boilerplate from boxing/unboxing values
-
 - Simple, effective structure
-
   - DSL syntax is provided by only 3 top level functions, excluding implicit conversions
   - Consistent naming and symmetric object models make dealing with different types simple
   - JSON objects can be converted to valid JSON strings with a single method call
-
 
 
 ## Why not ScJson?

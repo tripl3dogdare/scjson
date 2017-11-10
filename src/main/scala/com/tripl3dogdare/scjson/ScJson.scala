@@ -2,6 +2,7 @@ package com.tripl3dogdare
 
 import collection.SeqLike
 import scala.util.matching.Regex
+import scala.util.control.NoStackTrace
 import scala.annotation.tailrec
 import scala.language.existentials
 import scala.language.implicitConversions
@@ -59,17 +60,22 @@ package object scjson {
   }
 
   // Parsing
-  case object JsonParseError extends Exception("Error while parsing JSON")
+  case class JsonParseError(msg:String) extends Exception(msg) with NoStackTrace
   private final val Whitespace = "\\s".r
   private final val Digit = "\\d".r
   private final type Token = (Symbol, String) 
   private final val Noop = ('Noop, "")
 
-  def parseJson(from:String):JsonValue[_] = parse(lex(from))._1
+  def parseJson(from:String):JsonValue[_] = {
+    val parsed = parse(lex(from))
+    if(parsed._2.filter(_ != Noop).length > 0) 
+      throw JsonParseError("Input string contains unexpected tokens before EOF")
+    parsed._1
+  }
 
   @tailrec
   private def lex(from:String, tokens:List[Token]=List()):List[Token] = from.headOption match {
-    case None => tokens :+ ('EOF, "")
+    case None => tokens :+ Noop
     case Some(c) => c match {
       case Whitespace() => lex(from.trim, tokens)
       case '{' => lex(from.tail, tokens :+ ('ObjectBegin, "{"))
@@ -88,9 +94,12 @@ package object scjson {
       case Digit() | '-' => {
         var acc = ""
         val tail = from.dropWhile(c => c match {
-          case '-' if acc != "" => throw JsonParseError
-          case '.' if acc contains "." => throw JsonParseError
-          case 'e' | 'E' if acc.toLowerCase contains "e" => throw JsonParseError
+          case '-' if acc != "" => 
+            throw JsonParseError("Unexpected - when parsing number")
+          case '.' if acc contains "." => 
+            throw JsonParseError("Unexpected . when parsing number")
+          case 'e' | 'E' if acc.toLowerCase contains "e" => 
+            throw JsonParseError(s"Unexpected $c when parsing number")
           case Digit() | '-' | '.' | 'e' | 'E' => { acc += c; true }
           case _ => false
         })
@@ -101,7 +110,7 @@ package object scjson {
         if(from startsWith "true") lex(from.drop(4), tokens :+ ('Bool, "true")) else 
         if(from startsWith "false") lex(from.drop(5), tokens :+ ('Bool, "false")) else 
         if(from startsWith "null") lex(from.drop(4), tokens :+ ('Null, "null")) else 
-        throw JsonParseError
+        throw JsonParseError(s"Unexpected $c when parsing JSON")
     }
   }
 
@@ -112,12 +121,14 @@ package object scjson {
       var cont = tail.headOption.getOrElse(Noop)._1 != 'ObjectEnd
 
       while(cont) {
-        if(tail.length < 4) throw JsonParseError
+        if(tail.length < 4) 
+          throw JsonParseError("Unexpected EOF when parsing object")
         val key = tail.head
         val colon = tail.drop(1).head
         val value = tail.drop(2).head
         tail = tail.drop(3)
-        if(key._1 != 'String || colon._1 != 'Colon) throw JsonParseError
+        if(key._1 != 'String || colon._1 != 'Colon) 
+          throw JsonParseError("Objects must follow the structure {\"key1\":value1,\"key2\":value2}")
 
         val (value1, tail1) = parse(value +: tail)
         pairs = pairs :+ key._2 -> value1
@@ -127,7 +138,8 @@ package object scjson {
         else tail = tail.tail
       }
 
-      if(tail.head._1 != 'ObjectEnd) throw JsonParseError
+      if(tail.head._1 != 'ObjectEnd)
+        throw JsonParseError("Objects must follow the structure {\"key1\":value1,\"key2\":value2}")
       (JsonObject(Map(pairs:_*)), tail.tail)
     }
 
@@ -137,7 +149,8 @@ package object scjson {
       var cont = true
 
       while(cont) {
-        if(tail.length < 2) throw JsonParseError
+        if(tail.length < 2) 
+          throw JsonParseError("Unexpected EOF when parsing array")
         val value = tail.head
         val next = tail.drop(1).head
         tail = tail.drop(2)
@@ -150,7 +163,8 @@ package object scjson {
         else tail = tail.tail
       }
 
-      if(tail.head._1 != 'ArrayEnd) throw JsonParseError
+      if(tail.head._1 != 'ArrayEnd)
+        throw JsonParseError("Arrays must follow the structure [value1,value2]")
       (JsonArray(list), tail.tail)
     }
 
@@ -161,7 +175,7 @@ package object scjson {
           JsonFloat(value.toFloat) else JsonInt(value.toInt), tokens.tail)
       case 'Bool => (if(value == "true") JsonBoolean(true) else JsonBoolean(false), tokens.tail)
       case 'Null => (JsonNull(), tokens.tail)
-      case _ => throw JsonParseError
+      case _ => throw JsonParseError(s"Unexpected $value when parsing JSON")
     }
   }
 

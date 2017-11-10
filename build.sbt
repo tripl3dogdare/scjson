@@ -1,6 +1,6 @@
 name := "scjson"
 
-organization := "com.tripl3dogdare"
+organization := "com.github.tripl3dogdare"
 
 version := "1.0"
 

@@ -279,7 +279,7 @@ package object scjson {
     case ('ArrayBegin, _) => {
       var tail = tokens.tail
       var list:JsonList = List()
-      var cont = true
+      var cont = tail.headOption.getOrElse(Noop)._1 != 'ArrayEnd
 
       while(cont) {
         if(tail.length < 2) 

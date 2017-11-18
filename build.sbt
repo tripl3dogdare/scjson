@@ -2,7 +2,7 @@ name := "scjson"
 
 organization := "com.github.tripl3dogdare"
 
-version := "1.0.1"
+version := "1.0.2"
 
 scalaVersion := "2.12.4"
 
